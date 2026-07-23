@@ -1,0 +1,2 @@
+En el runtime de AWS Lambda, boto3 ya viene instalado, pero dejar este archivo facilita
+futuras ampliaciones y pruebas locales.
