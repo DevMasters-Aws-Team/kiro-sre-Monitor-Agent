@@ -196,15 +196,61 @@ Setup ➔ Spec ➔ Build ➔ Review ➔ Deploy
 
 ---
 
-## 🚀 Quick Start en 5 Minutos (Despliegue AWS)
+## 🚀 Quick Start (Despliegue AWS)
 
 Al ser el repositorio del Agente y despliegue, la configuración se centra en levantar la infraestructura:
 
 ```bash
 git clone https://github.com/DevMasters-Aws-Team/kiro-sre-Monitor-Agent.git
-cd kiro-sre-Monitor-Agent/infrastructure
+cd kiro-sre-Monitor-Agent
+
+# 1. Infraestructura
+cd terraform
 terraform init
-terraform apply -auto-approve
+terraform plan -var="environment=dev"
+terraform apply
+
+# 2. Verificar recursos
+aws events list-rules --event-bus-name kiro-monitor-events
+aws lambda list-functions | grep kiro
+aws dynamodb list-tables | grep -i knowledge
+```
+
+---
+
+## 📂 Estructura del Repositorio y Metodología SDD
+
+Siguiendo **Specs Driven Development**, antes de programar se definen los comportamientos en `.kiro/steering/`:
+
+```text
+kiro-sre-Monitor-Agent/
+├── 📂 .kiro/steering/                # Fase de Setup / SDD
+│   ├── global_steering.md            # Reglas cognitivas del agente (Observe → Reason → Act)
+│   ├── agent_prompts.md              # System prompts maestros para Amazon Bedrock
+│   ├── integrations.md              # Conexión con EventBridge, CloudWatch, Lambda, Cognito
+│   └── architecture_specs.md         # Arquitectura Event-Driven + Terraform modules
+│
+├── 📂 terraform/                     # Infraestructura como Código
+│   ├── main.tf                       # Provider + backend S3
+│   ├── variables.tf                  # Variables del proyecto
+│   ├── eventbridge.tf                # Event Bus + Rules
+│   ├── cloudwatch.tf                 # Log Groups + Alarms + Metric Filters
+│   ├── lambda.tf                     # Orchestrator + Skills functions
+│   ├── iam.tf                        # Roles + Policies (Least Privilege)
+│   ├── dynamodb.tf                   # KnowledgeTable, TicketsTable, IncidentsTable
+│   └── cognito.tf                    # User Pool + App Client
+│
+├── 📂 src/                           # Código del Orquestador
+│   ├── orchestrator.py               # Bucle principal del agente
+│   ├── bedrock_client.py             # Cliente Amazon Bedrock
+│   ├── event_handler.py              # Handler de eventos EventBridge
+│   ├── decision_engine.py            # Motor de decisiones
+│   └── prompts/                      # System prompts .md para Bedrock
+│
+├── 📂 tests/                         # Tests unitarios
+├── pyproject.toml
+├── Dockerfile
+└── Makefile
 ```
 
 ---
@@ -213,10 +259,11 @@ terraform apply -auto-approve
 
 | Capa | Tecnología |
 |------------|-----------|
-| **Frontend** | React + Vite |
-| **Backend API** | Node/Python (Microservicios) |
-| **Agente / IA** | Python, AWS Bedrock (Claude 3), MCP, Powers, Skills |
-| **DevOps / Infra** | AWS (CloudWatch, ECS, Lambda), Terraform, Docker, Git Hooks |
+| **Frontend** | React 18 + Vite 5 + TypeScript + TailwindCSS |
+| **Backend API** | Python 3.12 + FastAPI + Poetry + Docker |
+| **Agente / IA** | Python 3.12, AWS Bedrock (Claude 3 Sonnet), MCP, Powers, Skills |
+| **DevOps / Infra** | Terraform, AWS (CloudWatch, ECS Fargate, Lambda, EventBridge, DynamoDB, Cognito), Docker |
+| **Observabilidad** | CloudWatch Logs (JSON estructurado) + Alarmas + Metric Filters |
 
 ---
 
