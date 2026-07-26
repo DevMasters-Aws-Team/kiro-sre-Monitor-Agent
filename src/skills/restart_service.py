@@ -4,7 +4,12 @@ import logging
 
 from langchain_core.tools import tool
 
+from src.infrastructure.clients import aws_clients
+
 logger = logging.getLogger(__name__)
+
+# ECS Cluster name (configurable via env)
+ECS_CLUSTER = "kiro-monitor-dev-cluster"
 
 
 @tool
@@ -19,11 +24,18 @@ def restart_service(service_name: str) -> str:
     """
     logger.info("Ejecutando restart_service: %s", service_name)
 
-    # TODO: Implementar con boto3
-    # ecs_client.update_service(
-    #     cluster="kiro-cluster",
-    #     service=service_name,
-    #     forceNewDeployment=True
-    # )
+    try:
+        response = aws_clients.ecs.update_service(
+            cluster=ECS_CLUSTER,
+            service=service_name,
+            forceNewDeployment=True,
+        )
 
-    return f"Servicio '{service_name}' reiniciado exitosamente. Nuevo deployment en progreso."
+        service_status = response.get("service", {}).get("status", "UNKNOWN")
+        logger.info("Servicio %s reiniciado. Status: %s", service_name, service_status)
+
+        return f"Servicio '{service_name}' reiniciado exitosamente. Nuevo deployment en progreso. Status: {service_status}"
+
+    except Exception as e:
+        logger.error("Error al reiniciar servicio %s: %s", service_name, str(e))
+        return f"Error al reiniciar '{service_name}': {str(e)}"

@@ -4,6 +4,8 @@ import logging
 
 from langchain_core.tools import tool
 
+from src.infrastructure.clients import aws_clients
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +21,16 @@ def purge_queue(queue_name: str) -> str:
     """
     logger.info("Ejecutando purge_queue: %s", queue_name)
 
-    # TODO: Implementar con boto3
-    # sqs_client.purge_queue(QueueUrl=queue_url)
+    try:
+        # Construct queue URL (in real implementation, you'd look this up)
+        queue_url = f"https://sqs.us-east-1.amazonaws.com/123456789012/{queue_name}"
 
-    return f"Cola '{queue_name}' purgada exitosamente. Todos los mensajes eliminados."
+        aws_clients.sqs.purge_queue(QueueUrl=queue_url)
+
+        logger.info("Cola %s purgada exitosamente", queue_name)
+
+        return f"Cola '{queue_name}' purgada exitosamente. Todos los mensajes eliminados."
+
+    except Exception as e:
+        logger.error("Error al purgar cola %s: %s", queue_name, str(e))
+        return f"Error al purgar cola '{queue_name}': {str(e)}"

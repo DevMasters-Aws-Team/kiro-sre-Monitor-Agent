@@ -20,7 +20,7 @@
 
 ## 🎯 Descripción General
 
-**El Agente SRE Autónomo**  combina **Inteligencia Artificial (AWS Bedrock)** y **Site Reliability Engineering (SRE)** para analizar logs estructurados, correlacionar fallos en arquitecturas complejas y localizar cuellos de botella en segundos. 
+**El Agente SRE Autónomo** combina **Inteligencia Artificial (AWS Bedrock)** y **Site Reliability Engineering (SRE)** para analizar logs estructurados, correlacionar fallos en arquitecturas complejas y localizar cuellos de botella en segundos. 
 
 El proyecto integra todas las piezas clave para un desarrollo y despliegue modernos: **MCP, Skills, Hooks, Powers, AWS y Git + PRs**. 
 
@@ -145,25 +145,262 @@ DevMasters-Aws-Team
 
 ---
 
-## 🤝 Flujo de Trabajo (De la Idea a Producción)
+## 🚀 Quick Start (Local Development)
 
-El desarrollo del proyecto integra herramientas avanzadas: **MCP, Skills, Hooks, Powers, AWS y Git + PRs**. El ciclo de vida sigue este flujo:
+### Prerequisitos
 
-```text
-Setup ➔ Spec ➔ Build ➔ Review ➔ Deploy
+- Python 3.12 o superior
+- Poetry
+- Docker (opcional)
+
+### 1. Instalar dependencias
+
+```bash
+git clone https://github.com/DevMasters-Aws-Team/kiro-sre-Monitor-Agent.git
+cd kiro-sre-Monitor-Agent
+
+python -m pip install poetry
+python -m poetry install
 ```
 
-### 🛠️ Construir en Equipo + PRs
-1. Cada desarrollador implementa su spec en su rama (ej: `feat/filter-done`).
-2. Kiro trabaja en modo *Supervised*; los **Hooks** corren los tests automáticamente al guardar.
-3. Commit con mensaje generado por IA, push y apertura de Pull Request (PR).
-4. Descripción del PR con link al spec y guía de cómo probarlo.
+### 2. Configurar variables de entorno
 
-### 🚀 Review, Merge y Deploy a AWS
-1. Review de cada PR utilizando `/pr-review` + checklist de verificación.
-2. Feedback → prompt acotado → nuevo diff → aprobación humana.
-3. Merge a la rama `main` y deploy automático a **AWS**.
-4. **CloudWatch** observa y monitorea en producción.
+```bash
+copy .env.example .env
+```
+
+Editar `.env`:
+
+```env
+# Modo mock (sin AWS real)
+KIRO_USE_MOCK_AWS=true
+
+# Para produccion con AWS real
+# KIRO_USE_MOCK_AWS=false
+# AWS_REGION=us-east-1
+# BEDROCK_MODEL_ID=anthropic.claude-3-sonnet-20240229-v1:0
+```
+
+### 3. Levantar el agent
+
+```bash
+python -m poetry run uvicorn src.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+### 4. Verificar que funciona
+
+```bash
+# Test basico
+curl -X POST http://localhost:8001/webhook/test
+
+# Test con chaos
+curl -X POST http://localhost:8001/webhook/chaos?service=payment-service
+```
+
+---
+
+## 📡 Endpoints del Agent
+
+### Base URL: `http://localhost:8001`
+
+| Ruta | Metodo | Descripcion |
+|------|--------|-------------|
+| `/webhook` | POST | Recibe alertas de CloudWatch/EventBridge y del Backend |
+| `/webhook/test` | POST | Test de diagnostico con datos simulados |
+| `/webhook/chaos` | POST | Simula fallo en un servicio especifico |
+| `/chat` | POST | Chat conversacional con Carmen (usa Bedrock) |
+| `/chat/test` | POST | Verifica si Bedrock esta conectado |
+
+### Verificar conexion con Bedrock
+
+```bash
+curl -X POST http://localhost:8001/chat/test
+```
+
+**Respuesta esperada:**
+```json
+{
+  "status": "ok",
+  "llm_available": true,
+  "model": "us.amazon.nova-lite-v1:0"
+}
+```
+
+Si `llm_available` es `false`, revisar que `KIRO_USE_MOCK_AWS=false` en el `.env`.
+
+### Chat con Carmen
+
+```bash
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"message\": \"hola\"}"
+```
+
+**Respuesta esperada:** `"source": "llm"` (si dice `"fallback"`, Bedrock no respondio -- revisar credenciales y model ID en `.env`).
+
+### Modelos Bedrock soportados
+
+El agente detecta automaticamente el formato de request segun el modelo:
+
+| Model ID | Familia | Costo |
+|----------|---------|-------|
+| `us.amazon.nova-lite-v1:0` | Amazon Nova | Gratis en free tier |
+| `us.amazon.nova-pro-v1:0` | Amazon Nova | Bajo |
+| `anthropic.claude-3-haiku-20240307-v1:0` | Anthropic Claude | Bajo |
+| `anthropic.claude-3-5-sonnet-20241022-v2:0` | Anthropic Claude | Medio |
+
+### Ejemplo: Test de diagnostico
+
+```bash
+curl -X POST http://localhost:8001/webhook/test
+```
+
+**Respuesta:**
+```json
+{
+  "status": "analyzed",
+  "alert_id": "ede9b5e1-fcab-49ae-a798-143a6a81d416",
+  "analysis": "## Diagnóstico del Agente SRE\n\n**Severidad**: CRITICA\n**Causa raíz**: CPU utilization exceeded 80% threshold\n...",
+  "actions_suggested": []
+}
+```
+
+### Ejemplo: Simular fallo
+
+```bash
+curl -X POST "http://localhost:8001/webhook/chaos?service=inventory-service"
+```
+
+---
+
+## 🧠 Flujo de Decision del Agent
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  FLUJO OBSERVE → REASON → ACT                                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. OBSERVE (Observar)                                          │
+│     ├── Recibe alerta de CloudWatch/EventBridge                 │
+│     ├── Obtiene logs recientes del servicio afectado            │
+│     └── Recopila metricas y contexto                            │
+│                                                                  │
+│  2. REASON (Razonar)                                            │
+│     ├── Analiza logs con Bedrock (Claude 3)                     │
+│     ├── Clasifica severidad (CRITICA, ALTA, MEDIA, BAJA)        │
+│     ├── Calcula confianza del diagnostico                       │
+│     └── Determina accion recomendada                            │
+│                                                                  │
+│  3. ACT (Actuar)                                                │
+│     ├── Si confianza > 80% y accion segura: ejecuta automatico  │
+│     ├── Si confianza < 80%: sugiere accion para humano          │
+│     ├── Registra en audit trail (DynamoDB)                      │
+│     └── Notifica al Frontend                                    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔧 Skills Disponibles
+
+| Skill | Descripcion | Servicio AWS |
+|-------|-------------|--------------|
+| `restart_service` | Reinicia un servicio en ECS | ECS |
+| `scale_up` | Escala instancias de un servicio | ECS/Auto Scaling |
+| `clear_cache` | Limpia cache de Redis/ElastiCache | ElastiCache |
+| `purge_queue` | Limpia cola SQS con mensajes stuck | SQS |
+
+---
+
+## 🏗️ Estructura del Repositorio
+
+```text
+kiro-sre-Monitor-Agent/
+├── 📂 .kiro/steering/                # Fase de Setup / SDD
+│   ├── global_steering.md            # Reglas cognitivas del agente
+│   ├── agent_prompts.md              # System prompts maestros
+│   ├── integrations.md               # Conexiones AWS
+│   └── architecture_specs.md         # Arquitectura Event-Driven
+│
+├── 📂 terraform/                     # Infraestructura como Código
+│   ├── main.tf                       # Provider + backend S3
+│   ├── variables.tf                  # Variables del proyecto
+│   ├── eventbridge.tf                # Event Bus + Rules
+│   ├── cloudwatch.tf                 # Log Groups + Alarms
+│   ├── lambda.tf                     # Skills functions
+│   ├── iam.tf                        # Roles + Policies
+│   ├── dynamodb.tf                   # Tablas de datos
+│   └── cognito.tf                    # User Pool
+│
+├── 📂 src/                           # Código del Orquestador
+│   ├── main.py                       # Entry point FastAPI
+│   ├── config.py                     # Configuracion (pydantic-settings)
+│   ├── agents/
+│   │   ├── orchestrator.py           # Bucle Observe → Reason → Act
+│   │   ├── decision_engine.py        # Motor de decisiones
+│   │   └── event_handler.py          # Handler de eventos
+│   ├── infrastructure/
+│   │   └── clients.py                # Clientes AWS (mock/real)
+│   ├── skills/
+│   │   ├── restart_service.py        # Skill de reinicio
+│   │   ├── scale_up.py               # Skill de escalado
+│   │   ├── clear_cache.py            # Skill de limpieza cache
+│   │   └── purge_queue.py            # Skill de limpieza cola
+│   ├── models/
+│   │   └── alerts.py                 # Modelos de datos
+│   └── routers/
+│       └── webhook.py                # Endpoints webhook
+│
+├── 📂 tests/                         # Tests unitarios
+├── Dockerfile                        # Container para deploy
+├── docker-compose.yml                # Docker Compose
+├── Makefile                          # Comandos automatizados
+├── pyproject.toml                    # Dependencias (Poetry)
+└── .env.example                      # Template de variables
+```
+
+---
+
+## 🛠️ Stack Tecnológico Global
+
+| Capa | Tecnología |
+|------------|-----------|
+| **Frontend** | React 18 + Vite 5 + TypeScript + TailwindCSS |
+| **Backend API** | Python 3.12 + FastAPI + Poetry + Docker |
+| **Agente / IA** | Python 3.12, AWS Bedrock (Claude 3 Sonnet), MCP, Powers, Skills |
+| **DevOps / Infra** | Terraform, AWS (CloudWatch, ECS Fargate, Lambda, EventBridge, DynamoDB, Cognito), Docker |
+| **Observabilidad** | CloudWatch Logs (JSON estructurado) + Alarmas + Metric Filters |
+
+---
+
+## 🧪 Tests
+
+```bash
+# Correr todos los tests
+python -m poetry run pytest
+
+# Con cobertura
+python -m poetry run pytest --cov=src --cov-report=html
+
+# Tests especificos
+python -m poetry run pytest tests/test_decision_engine.py -v
+```
+
+---
+
+## 🐳 Docker
+
+```bash
+# Construir imagen
+docker build -t kiro-agent:latest .
+
+# Ejecutar
+docker run -p 8001:8001 --env-file .env kiro-agent:latest
+
+# O con Docker Compose (junto con Backend)
+docker-compose up -d
+```
 
 ---
 
@@ -196,74 +433,30 @@ Setup ➔ Spec ➔ Build ➔ Review ➔ Deploy
 
 ---
 
-## 🚀 Quick Start (Despliegue AWS)
-
-Al ser el repositorio del Agente y despliegue, la configuración se centra en levantar la infraestructura:
-
-```bash
-git clone https://github.com/DevMasters-Aws-Team/kiro-sre-Monitor-Agent.git
-cd kiro-sre-Monitor-Agent
-
-# 1. Infraestructura
-cd terraform
-terraform init
-terraform plan -var="environment=dev"
-terraform apply
-
-# 2. Verificar recursos
-aws events list-rules --event-bus-name kiro-monitor-events
-aws lambda list-functions | grep kiro
-aws dynamodb list-tables | grep -i knowledge
-```
-
----
-
-## 📂 Estructura del Repositorio y Metodología SDD
-
-Siguiendo **Specs Driven Development**, antes de programar se definen los comportamientos en `.kiro/steering/`:
+## 🔄 Integracion con Backend y Frontend
 
 ```text
-kiro-sre-Monitor-Agent/
-├── 📂 .kiro/steering/                # Fase de Setup / SDD
-│   ├── global_steering.md            # Reglas cognitivas del agente (Observe → Reason → Act)
-│   ├── agent_prompts.md              # System prompts maestros para Amazon Bedrock
-│   ├── integrations.md              # Conexión con EventBridge, CloudWatch, Lambda, Cognito
-│   └── architecture_specs.md         # Arquitectura Event-Driven + Terraform modules
-│
-├── 📂 terraform/                     # Infraestructura como Código
-│   ├── main.tf                       # Provider + backend S3
-│   ├── variables.tf                  # Variables del proyecto
-│   ├── eventbridge.tf                # Event Bus + Rules
-│   ├── cloudwatch.tf                 # Log Groups + Alarms + Metric Filters
-│   ├── lambda.tf                     # Orchestrator + Skills functions
-│   ├── iam.tf                        # Roles + Policies (Least Privilege)
-│   ├── dynamodb.tf                   # KnowledgeTable, TicketsTable, IncidentsTable
-│   └── cognito.tf                    # User Pool + App Client
-│
-├── 📂 src/                           # Código del Orquestador
-│   ├── orchestrator.py               # Bucle principal del agente
-│   ├── bedrock_client.py             # Cliente Amazon Bedrock
-│   ├── event_handler.py              # Handler de eventos EventBridge
-│   ├── decision_engine.py            # Motor de decisiones
-│   └── prompts/                      # System prompts .md para Bedrock
-│
-├── 📂 tests/                         # Tests unitarios
-├── pyproject.toml
-├── Dockerfile
-└── Makefile
+┌─────────────────────────────────────────────────────────────────┐
+│  FLUJO DE INTEGRACION                                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Backend (localhost:8000)                                        │
+│  └── Genera logs de microservicios                              │
+│      └── Envia a CloudWatch (o genera en memoria)               │
+│                                                                  │
+│  Agent (localhost:8001)                                          │
+│  └── Recibe alertas via webhook                                 │
+│      └── Analiza con Bedrock                                    │
+│      └── Ejecuta skills de remediacion                          │
+│      └── Retorna diagnostico                                    │
+│                                                                  │
+│  Frontend (localhost:3000)                                       │
+│  └── Muestra dashboard en tiempo real                           │
+│      └── Consulta Backend: /api/services, /api/logs             │
+│      └── Consulta Agent: /webhook/*                             │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## 🛠️ Stack Tecnológico Global
-
-| Capa | Tecnología |
-|------------|-----------|
-| **Frontend** | React 18 + Vite 5 + TypeScript + TailwindCSS |
-| **Backend API** | Python 3.12 + FastAPI + Poetry + Docker |
-| **Agente / IA** | Python 3.12, AWS Bedrock (Claude 3 Sonnet), MCP, Powers, Skills |
-| **DevOps / Infra** | Terraform, AWS (CloudWatch, ECS Fargate, Lambda, EventBridge, DynamoDB, Cognito), Docker |
-| **Observabilidad** | CloudWatch Logs (JSON estructurado) + Alarmas + Metric Filters |
 
 ---
 

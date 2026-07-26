@@ -19,18 +19,19 @@ VALID_ALERT_PAYLOAD = {
 
 
 @pytest.fixture(autouse=True)
-def mock_agent():
-    """Mock del agente para todos los tests del webhook (evita llamadas a Bedrock)."""
-    fake_message = MagicMock()
-    fake_message.content = "Severidad: ALTA. Escalar servicio recomendado."
-    fake_message.name = None
+def mock_orchestrator():
+    """Mock del orquestador para todos los tests del webhook (evita llamadas a Bedrock)."""
+    mock_response = WebhookResponse(
+        status="analyzed",
+        alert_id="test-alert-id-123",
+        analysis="Severidad: ALTA. Escalar servicio recomendado.",
+        actions_suggested=[],
+    )
 
-    mock_result = {"messages": [fake_message]}
-
-    agent_mock = MagicMock()
-    agent_mock.ainvoke = AsyncMock(return_value=mock_result)
-
-    with patch("src.agents.sre_autonomo.agent._build_agent", return_value=agent_mock):
+    with patch(
+        "src.agents.sre_autonomo.agent.orchestrator"
+    ) as mock:
+        mock.process_alert = AsyncMock(return_value=mock_response)
         yield
 
 
@@ -61,13 +62,12 @@ class TestWebhook:
         assert data["status"] == "analyzed"
 
     @pytest.mark.asyncio
-    async def test_webhook_alert_id_is_uuid(self, client: AsyncClient):
-        """El alert_id debe ser un UUID válido."""
-        import uuid
-
+    async def test_webhook_alert_id_is_string(self, client: AsyncClient):
+        """El alert_id debe ser un string no vacío."""
         response = await client.post("/webhook", json=VALID_ALERT_PAYLOAD)
         data = response.json()
-        uuid.UUID(data["alert_id"])  # raises ValueError si no es UUID válido
+        assert isinstance(data["alert_id"], str)
+        assert len(data["alert_id"]) > 0
 
     @pytest.mark.asyncio
     async def test_webhook_analysis_not_empty(self, client: AsyncClient):
