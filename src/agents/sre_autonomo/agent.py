@@ -2,13 +2,20 @@
 
 Recibe alertas de CloudWatch, las analiza con LangChain create_agent
 y ejecuta acciones de remediación cuando es necesario.
+
+Soporta:
+  - Múltiples proveedores de modelo (KIRO_MODEL_ID)
+  - Tools locales (skills/) + tools remotas via MCP (mcp_servers.json)
 """
 
 import logging
 import uuid
 
 from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
 
+from src.adapters.mcp_adapter import MCPAdapter
+from src.agents.llm_provider import get_model
 from src.agents.sre_autonomo.prompts import SYSTEM_PROMPT
 from src.config import settings
 from src.models.alerts import CloudWatchAlert, WebhookResponse
@@ -19,18 +26,43 @@ from src.skills.scale_up import scale_up
 
 logger = logging.getLogger(__name__)
 
-# Tools disponibles para el agente
-AGENT_TOOLS = [restart_service, scale_up, clear_cache, purge_queue]
+# Tools locales (skills del agente SRE)
+LOCAL_TOOLS = [restart_service, scale_up, clear_cache, purge_queue]
+
+# Checkpointer para mantener estado de conversación
+checkpointer = InMemorySaver()
+
+# Adaptador MCP (singleton para reutilizar conexiones)
+_mcp_adapter = MCPAdapter()
 
 
-def _build_agent():
-    """Construye el agente SRE Autónomo con create_agent."""
-    model_string = f"bedrock_converse:{settings.bedrock_model_id}"
+async def _build_agent():
+    """Construye el agente SRE Autónomo con create_agent.
+
+    Combina las tools locales (skills/) con las tools remotas
+    obtenidas de servidores MCP configurados en mcp_servers.json.
+    """
+    model = get_model()
+
+    # Combinar tools locales + MCP tools
+    all_tools = list(LOCAL_TOOLS)
+
+    if _mcp_adapter.is_configured:
+        mcp_tools = await _mcp_adapter.get_tools()
+        all_tools.extend(mcp_tools)
+        logger.info(
+            "Agente construido con %d tools locales + %d tools MCP",
+            len(LOCAL_TOOLS),
+            len(mcp_tools),
+        )
+    else:
+        logger.info("Agente construido con %d tools locales (sin MCP)", len(LOCAL_TOOLS))
 
     agent = create_agent(
-        model=model_string,
-        tools=AGENT_TOOLS,
+        model=model,
+        tools=all_tools,
         system_prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
     )
 
     return agent
@@ -61,12 +93,13 @@ async def analyze_alert(alert: CloudWatchAlert) -> WebhookResponse:
         alert.state,
     )
 
-    agent = _build_agent()
+    agent = await _build_agent()
     message = _format_alert_message(alert)
 
     try:
         result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": message}]}
+            {"messages": [{"role": "user", "content": message}]},
+            config={"configurable": {"thread_id": alert_id}},
         )
 
         # Extraer la respuesta final del agente

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "context7": {
+      "transport": "streamable_http",
+      "url": "https://mcp.context7.com/mcp",
+      "disabled": true
+    }
+  }
+}
