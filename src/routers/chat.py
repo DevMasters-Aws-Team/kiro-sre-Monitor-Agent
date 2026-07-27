@@ -27,186 +27,17 @@ class ChatResponse(BaseModel):
     model: Optional[str] = None
 
 
-# System prompt for Carmen
-SYSTEM_PROMPT = """Eres Carmen, una ingeniera SRE (Site Reliability Engineering) experta en AWS. 
-Tu trabajo es ayudar a los ingenieros con:
-
-1. **Diagnóstico de incidentes**: Analizas logs, métricas y alertas para encontrar la causa raíz.
-2. **Remediación**: Sugieres acciones específicas para resolver problemas.
-3. **Monitoreo**: Explicas cómo configurar alertas y dashboards.
-4. **Arquitectura**: Aconsejas sobre mejores prácticas de arquitectura en AWS.
-
-Características:
-- Respondes en español
-- Eres concisa y técnica
-- Das respuestas accionables
-- Usas formato markdown para mejor legibilidad
-- Cuando no sabes algo, lo admites
-
-Servicios que monitoreas:
-- login-service (Autenticación)
-- biometric-service (Biometría)
-- product-service (Productos)
-- inventory-service (Inventario)
-- address-validation-service (Direcciones)
-- purchase-service (Compras)
-- sales-service (Ventas)
-- email-service (Notificaciones)
-
-Responde de forma breve y técnica. Si te preguntan sobre un servicio específico, 
-proporciona diagnósticos basados en los logs y métricas disponibles."""
+from src.routers.prompts import (
+    CARMEN_SYSTEM_PROMPT,
+    SALUDOS_SIMPLES,
+    FALLBACK_GREETING,
+    FALLBACK_OFFLINE,
+)
 
 
 def _get_fallback_response(message: str) -> str:
     """Fallback response when LLM is not available."""
-    message_lower = message.lower()
-    
-    # Simple keyword-based responses
-    if any(word in message_lower for word in ["hola", "hello", "buenas"]):
-        return """¡Hola! Soy Carmen, tu asistente SRE. 
-
-Puedo ayudarte con:
-- **Diagnóstico** de incidentes en microservicios
-- **Análisis** de logs y métricas
-- **Remediación** automática de problemas
-- **Configuración** de monitoreo en AWS
-
-¿En qué puedo ayudarte hoy?"""
-    
-    # Microservices count and status
-    if any(word in message_lower for word in ["cuantos", "cuántos", "cantidad", "numeros", "número", "servicios", "microservicios", "activos", "monitoreando"]):
-        return """## 📊 Microservicios Activos
-
-Actualmente estamos monitoreando **8 microservicios**:
-
-| # | Servicio | Estado | Latencia |
-|---|----------|--------|----------|
-| 1 | login-service | ✅ OK | 45ms |
-| 2 | biometric-service | ⚠️ WARN | 520ms |
-| 3 | product-service | ✅ OK | 65ms |
-| 4 | inventory-service | ✅ OK | 80ms |
-| 5 | address-validation-service | ✅ OK | 110ms |
-| 6 | purchase-service | ✅ OK | 135ms |
-| 7 | sales-service | ❌ DOWN | 3400ms |
-| 8 | email-service | ✅ OK | 90ms |
-
-### Resumen:
-- ✅ **6 servicios** operativos (OK)
-- ⚠️ **1 servicio** con advertencia (WARN)
-- ❌ **1 servicio** caído (DOWN)
-
-**Disponibilidad global**: 75%
-
-¿Necesitas más detalles sobre algún servicio específico?"""
-    
-    if any(word in message_lower for word in ["status", "estado", "salud"]):
-        return """## Estado del Sistema
-
-| Servicio | Estado | Latencia |
-|----------|--------|----------|
-| login-service | ✅ OK | 45ms |
-| biometric-service | ⚠️ WARN | 520ms |
-| product-service | ✅ OK | 65ms |
-| inventory-service | ✅ OK | 80ms |
-| purchase-service | ✅ OK | 135ms |
-| sales-service | ❌ DOWN | 3400ms |
-| email-service | ✅ OK | 90ms |
-
-**Recomendación**: El servicio `sales-service` está experimentando timeouts. 
-¿Quieres que ejecute un reinicio automático?"""
-    
-    if any(word in message_lower for word in ["error", "fallo", "problema", "errores"]):
-        return """## Análisis de Errores Recientes
-
-He detectado los siguientes errores:
-
-1. **DatabaseTimeoutError** en `sales-service`
-   - Severidad: CRÍTICA
-   - Acción recomendada: Reiniciar servicio
-   
-2. **PaymentGatewayTimeoutError** en `product-service`
-   - Severidad: ALTA
-   - Acción recomendada: Verificar conexión a BD
-
-¿Quieres que ejecute alguna remediación automática?"""
-    
-    if any(word in message_lower for word in ["ayuda", "help", "que puedes", "qué puedes"]):
-        return """## ¿Qué puedo hacer?
-
- Como ingeniera SRE virtual, puedo:
-
-### 📊 Monitoreo
-- Consultar estado de servicios
-- Analizar métricas de latencia
-- Revisar logs de errores
-
-### 🔧 Remediación
-- Reiniciar servicios caídos
-- Escalar instancias bajo demanda
-- Limpiar colas SQS stuck
-- Invalidar cache de Redis
-
-### 📝 Análisis
-- Diagnosticar causa raíz de incidentes
-- Correlacionar errores entre servicios
-- Sugerir mejoras de arquitectura
-
-### 🚀 Configuración
-- Crear alertas de CloudWatch
-- Configurar EventBridge rules
-- Optimizar costos de AWS
-
-¡Pregúntame lo que necesites!"""
-    
-    if any(word in message_lower for word in ["reiniciar", "restart", "reinicio"]):
-        return """## 🔧 Reinicio de Servicios
-
-Puedo reiniciar los siguientes servicios:
-
-1. **sales-service** (❌ DOWN) - Recomendado
-2. **biometric-service** (⚠️ WARN) - Opcional
-
-¿Cuál quieres que reinicie?
-
-**Nota**: El reinicio es seguro y no afecta otros servicios."""
-    
-    if any(word in message_lower for word in ["logs", "log", "registros"]):
-        return """## 📋 Logs Recientes
-
-Últimos logs de errores:
-
-```
-[ERROR] 2026-07-26 01:45:30 - sales-service
-  DatabaseTimeoutError: Connection timeout
-  
-[ERROR] 2026-07-26 01:44:15 - product-service  
-  PaymentGatewayTimeoutError: Gateway timeout
-  
-[WARN] 2026-07-26 01:43:00 - biometric-service
-  High latency detected: 520ms
-```
-
-¿Quieres que analice algún log específico?"""
-    
-    # Default response with more context
-    return f"""He recibido tu consulta: "{message}"
-
-## 💡 Puedo ayudarte con:
-
-### Preguntas frecuentes:
-- **"¿Cuántos servicios tenemos?"** → Te muestro el estado actual
-- **"¿Cuál es el estado del sistema?"** → Resumen de salud
-- **"¿Qué errores hay?"** → Análisis de incidentes
-- **"Reiniciar sales-service"** → Ejecuto remediación
-- **"Muéstrame los logs"** → Logs recientes
-
-### Comandos disponibles:
-- `status` - Estado del sistema
-- `errors` - Errores recientes
-- `restart [servicio]` - Reiniciar servicio
-- `logs` - Ver logs
-
-¿Qué necesitas saber?"""
+    return FALLBACK_OFFLINE
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -214,9 +45,18 @@ async def chat(request: ChatRequest):
     """
     Chat with Carmen SRE Agent.
     
-    Uses Bedrock (Claude) for intelligent responses, or fallback if not available.
+    Uses Bedrock (Claude/Nova) for intelligent responses, or fallback if not available.
     """
     from src.config import settings
+    
+    # Optimización de Recursos y Tokens: Pre-filtro de saludos y charla básica
+    message_clean = request.message.lower().strip(" ?,.¡!¿")
+    if message_clean in SALUDOS_SIMPLES:
+        return ChatResponse(
+            response=FALLBACK_GREETING,
+            source="fallback",
+            model=None
+        )
     
     # Try to use LLM if not in mock mode
     if not settings.use_mock_aws:
@@ -346,7 +186,7 @@ def _chat_with_llm(message: str, context: str = None, history: list = None) -> s
     logger.info("AWS Region: %s, Access Key present: %s", settings.aws_region, bool(settings.aws_access_key_id))
 
     # Build system context con el estado real del sistema
-    system_context = SYSTEM_PROMPT + _build_incident_context()
+    system_context = CARMEN_SYSTEM_PROMPT + _build_incident_context()
     if context:
         system_context += f"\n\nContexto adicional: {context}"
 

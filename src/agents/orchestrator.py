@@ -158,6 +158,35 @@ class Orchestrator:
         except Exception as e:
             logger.warning("No se pudieron obtener logs de CloudWatch: %s", str(e))
 
+        # Fallback: Si no se recuperaron logs de CloudWatch (o estamos en desarrollo/mock),
+        # consultar directamente al backend local para obtener logs estructurados rápidos.
+        if not context["recent_logs"]:
+            try:
+                import httpx
+                backend_url = "http://localhost:8000/api/logs"
+                logger.info("Intentando recuperar logs resumidos desde el backend local: %s", backend_url)
+                
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(backend_url, timeout=3.0)
+                    if resp.status_code == 200:
+                        all_logs = resp.json()
+                        # Filtrar logs para el microservicio específico
+                        filtered = [
+                            {
+                                "timestamp": int(datetime.utcnow().timestamp() * 1000),
+                                "message": f"[{log.get('level', 'INFO')}] {log.get('msg', '')} (service={log.get('service')}, method={log.get('method')}, status={log.get('status')})"
+                            }
+                            for log in all_logs if log.get("service") == service_name
+                        ]
+                        context["recent_logs"] = filtered[:20]
+                        logger.info(
+                            "Observe (Fallback Backend): %d logs locales recuperados para %s",
+                            len(filtered),
+                            service_name,
+                        )
+            except Exception as ex:
+                logger.warning("No se pudieron recuperar logs de fallback del backend: %s", str(ex))
+
         return context
 
     async def _reason(
