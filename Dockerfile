@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first for better caching
 COPY pyproject.toml .
+COPY README.md .
 COPY src/ src/
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -e ".[dev]"
+RUN pip install --no-cache-dir .
 
 # Stage 2: Production
 FROM python:3.12-slim as production
