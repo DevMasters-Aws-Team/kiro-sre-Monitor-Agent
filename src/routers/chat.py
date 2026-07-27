@@ -162,8 +162,8 @@ def _build_incident_context() -> str:
             f"- [{inc['severity']}] {inc['service']} | {inc['error_type']} "
             f"| HTTP {inc['status_code']} | {inc['duration_ms']}ms\n"
             f"  Endpoint: {inc['endpoint'] or 'N/A'}\n"
-            f"  Causa raíz: {inc['root_cause']}\n"
-            f"  Decisión del agente: {inc['decision']} ({inc['decision_reason']})\n"
+            f"  Causa raiz: {inc['root_cause']}\n"
+            f"  Recomendacion: {inc['decision_reason']}\n"
             f"  Trace ID: {inc['trace_id'] or 'N/A'} | Detectado: {inc['detected_at']}"
         )
 
@@ -172,6 +172,16 @@ def _build_incident_context() -> str:
         "reporta estos incidentes concretos con su causa raíz y la acción recomendada."
     )
     return "\n".join(lines)
+
+
+def _is_greeting(message: str) -> bool:
+    """Detecta si un mensaje es un saludo conversacional simple."""
+    clean = message.lower().strip(" ?,.¡!¿")
+    words = {"hola", "buenas", "buenos", "buen", "tardes", "noches", "tal", "como", "cómo", "hello", "hi", "hey"}
+    tokens = [t for t in clean.split() if t]
+    if len(tokens) <= 3 and any(t in words for t in tokens):
+        return True
+    return False
 
 
 def _chat_with_llm(message: str, context: str = None, history: list = None) -> str:
@@ -185,8 +195,12 @@ def _chat_with_llm(message: str, context: str = None, history: list = None) -> s
     logger.info("Invoking Bedrock - Model: %s (Nova=%s)", model_id, is_nova)
     logger.info("AWS Region: %s, Access Key present: %s", settings.aws_region, bool(settings.aws_access_key_id))
 
-    # Build system context con el estado real del sistema
-    system_context = CARMEN_SYSTEM_PROMPT + _build_incident_context()
+    # Build system context con el estado real del sistema (solo si NO es un saludo simple)
+    if _is_greeting(message):
+        system_context = CARMEN_SYSTEM_PROMPT + "\n\n(El usuario te esta saludando de manera sencilla. Brinda un saludo muy amable, amigable, corto y profesional en español, de maximo 2 lineas, presentandote brevemente y preguntandole en que puedes asistir hoy con la observabilidad de sus microservicios, sin listar ningun incidente ni log de forma predeterminada)."
+    else:
+        system_context = CARMEN_SYSTEM_PROMPT + _build_incident_context()
+        
     if context:
         system_context += f"\n\nContexto adicional: {context}"
 
