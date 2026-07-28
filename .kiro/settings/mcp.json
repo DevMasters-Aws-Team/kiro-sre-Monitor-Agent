@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "search_documentation",
+        "read_documentation",
+        "get_available_services"
+      ]
+    },
+    "kiro-cloudwatch": {
+      "command": "python",
+      "args": ["src/mcp/cloudwatch_mcp_server.py"],
+      "env": {
+        "KIRO_AWS_REGION": "us-east-1",
+        "KIRO_LOG_GROUP_NAME": "/kiro/microservices/backend"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "get_recent_errors",
+        "get_service_health",
+        "get_incident_summary"
+      ]
+    },
+    "kiro-dynamodb": {
+      "command": "python",
+      "args": ["src/mcp/dynamodb_mcp_server.py"],
+      "env": {
+        "KIRO_AWS_REGION": "us-east-1",
+        "KIRO_KNOWLEDGE_TABLE": "kiro-dev-KnowledgeTable"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "query_knowledge_base",
+        "list_known_errors"
+      ]
+    }
+  }
+}

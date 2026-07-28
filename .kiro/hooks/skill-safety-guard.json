@@ -1,0 +1,13 @@
+{
+  "name": "Skill Safety Guard",
+  "version": "1.0.0",
+  "description": "Antes de ejecutar skills de alto riesgo (restart, purge), verifica que no estamos en producción o solicita confirmación",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["shell"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "VERIFICACIÓN DE SEGURIDAD ANTES DE EJECUCIÓN: Si la operación involucra skills de remediación de alto riesgo (restart_service, purge_queue, scale_up), verifica: 1) Que KIRO_ENVIRONMENT en el .env no sea 'production'. 2) Que existe un incidente activo que justifique la acción. 3) Que la confianza del diagnóstico supera 0.7. Si KIRO_ENVIRONMENT es 'production' y la operación es destructiva, DENEGAR y pedir confirmación explícita del usuario antes de proceder."
+  }
+}

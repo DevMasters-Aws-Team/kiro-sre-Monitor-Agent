@@ -1,0 +1,13 @@
+{
+  "name": "Webhook Incident Logger",
+  "version": "1.0.0",
+  "description": "Después de procesar un webhook de alerta, loguea el resultado del diagnóstico para trazabilidad",
+  "when": {
+    "type": "postToolUse",
+    "toolTypes": ["web"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Si se acaba de procesar una respuesta de webhook del agente: extrae el alert_id, service, diagnosis y actions_suggested del response. Genera una línea de log estructurado con formato: [INCIDENT] alert_id=<id> service=<svc> severity=<sev> action=<action> confidence=<conf> llm=<true/false>. Esto sirve como evidencia del flujo Observe→Reason→Act en el hackathon."
+  }
+}

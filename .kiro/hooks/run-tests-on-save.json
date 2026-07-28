@@ -1,0 +1,13 @@
+{
+  "name": "Run Agent Tests on Save",
+  "version": "1.0.0",
+  "description": "Ejecuta pytest del agente cada vez que se guarda un archivo Python fuente o de test",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["src/**/*.py", "tests/**/*.py"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "python -m pytest tests/ -v --tb=short -q"
+  }
+}
